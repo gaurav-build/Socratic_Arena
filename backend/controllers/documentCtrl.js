@@ -160,7 +160,6 @@ export const handleDebateUpload = async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Failed to process debate request. Please try again later.',
-      error: error.message,
     });
   }
 };

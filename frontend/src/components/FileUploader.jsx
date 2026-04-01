@@ -1,4 +1,5 @@
-import { UploadCloud, FileText } from 'lucide-react';
+import { UploadCloud, FileText, Bot } from 'lucide-react';
+import { DEBATE_MODELS } from '../lib/debateModels';
 
 /**
  * FileUploader
@@ -6,9 +7,10 @@ import { UploadCloud, FileText } from 'lucide-react';
  * Left-side upload card for The Socratic Arena.
  * - Lets user choose a PDF document.
  * - Lets user define debate topic.
+ * - Lets user select the AI model for the debate.
  * - Delegates state ownership to parent via callback props.
  */
-const FileUploader = ({ onFileSelect, onTopicChange, topic = '', selectedFile = null }) => {
+const FileUploader = ({ onFileSelect, onTopicChange, onModelChange, topic = '', selectedFile = null, selectedModel = 'gemini-2.5-flash' }) => {
   return (
     <div className="w-full max-w-xl rounded-2xl border border-slate-700/80 bg-slate-900/70 p-6 shadow-2xl backdrop-blur-sm">
       <div className="mb-6">
@@ -41,7 +43,7 @@ const FileUploader = ({ onFileSelect, onTopicChange, topic = '', selectedFile = 
         </div>
       </div>
 
-      <div>
+      <div className="mb-5">
         <label htmlFor="topic" className="mb-2 block text-sm font-semibold text-slate-200">
           Debate Topic
         </label>
@@ -53,6 +55,28 @@ const FileUploader = ({ onFileSelect, onTopicChange, topic = '', selectedFile = 
           placeholder="e.g., Is the proposed policy ethically justified?"
           className="w-full rounded-lg border border-slate-600 bg-slate-950/80 px-4 py-3 text-sm text-slate-100 placeholder-slate-500 outline-none ring-cyan-400/70 transition focus:border-cyan-400 focus:ring-2"
         />
+      </div>
+
+      <div>
+        <label htmlFor="ai-model" className="mb-2 flex items-center gap-2 text-sm font-semibold text-slate-200">
+          <Bot className="h-4 w-4 text-cyan-300" />
+          AI Debate Model
+        </label>
+        <select
+          id="ai-model"
+          value={selectedModel}
+          onChange={(event) => onModelChange?.(event.target.value)}
+          className="w-full rounded-lg border border-slate-600 bg-slate-950/80 px-4 py-3 text-sm text-slate-100 outline-none ring-cyan-400/70 transition focus:border-cyan-400 focus:ring-2"
+        >
+          {DEBATE_MODELS.map((m) => (
+            <option key={m.id} value={m.id}>
+              {m.label} ({m.provider})
+            </option>
+          ))}
+        </select>
+        <p className="mt-1.5 text-xs text-slate-500">
+          Claude models require an <span className="text-slate-400 font-medium">ANTHROPIC_API_KEY</span> on the backend.
+        </p>
       </div>
     </div>
   );

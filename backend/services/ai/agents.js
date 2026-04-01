@@ -20,6 +20,10 @@ import {
   ChatGoogleGenerativeAI,
 } from '@langchain/google-genai';
 
+// Anthropic Claude chat client used by LangChain.
+// NOTE: Requires ANTHROPIC_API_KEY in environment variables.
+import { ChatAnthropic } from '@langchain/anthropic';
+
 // MemoryVectorStore keeps vectors in-memory for fast prototyping and local runs.
 import { MemoryVectorStore } from 'langchain/vectorstores/memory';
 
@@ -163,7 +167,7 @@ const formatRetrievedEvidence = (documents) => {
  * - Defender and Critic must behave differently to generate a useful debate.
  * - Strong role prompts reduce bland, generic responses.
  *
- * @param {ChatGoogleGenerativeAI} model - Shared chat model instance.
+ * @param {ChatGoogleGenerativeAI|ChatAnthropic} model - Shared chat model instance.
  * @param {string} systemPrompt - Persona instructions.
  * @returns {{ invoke: (input: {topic: string, evidence: string, priorContext?: string}) => Promise<string> }}
  */
@@ -215,26 +219,38 @@ const createPersonaChain = (model, systemPrompt) => {
  * 3) Generate a role-specific argument.
  *
  * @param {import('@langchain/core/retrievers').BaseRetrieverInterface} retriever - Retriever from createKnowledgeBase.
+ * @param {string} [modelId] - Optional model identifier. Defaults to 'gemini-2.5-flash'.
+ *   Pass a Claude model ID (e.g. 'claude-3-5-sonnet-20241022') to use Anthropic instead.
  * @returns {Promise<{
  *   defender: { respond: (input: {topic: string, priorContext?: string}) => Promise<string> },
  *   critic: { respond: (input: {topic: string, priorContext?: string}) => Promise<string> }
  * }>}
  * @throws {Error} If chat model or persona setup fails.
  */
-export const createAgents = async (retriever) => {
+export const createAgents = async (retriever, modelId) => {
   try {
     // Validate retriever interface shape to prevent runtime surprises.
     if (!retriever || typeof retriever.invoke !== 'function') {
       throw new Error('A valid retriever with an invoke function is required to create agents.');
     }
 
-    // Shared Gemini chat model configuration for both personas.
-    const chatModel = new ChatGoogleGenerativeAI({
-      model: 'gemini-2.5-flash',
-      temperature: 0.5,
-      apiKey: process.env.GOOGLE_API_KEY,
-      maxRetries: 0,
-    });
+    // Select the chat model based on the requested modelId.
+    // Claude models are identified by a 'claude-' prefix; everything else uses Gemini.
+    const isClaudeModel = typeof modelId === 'string' && modelId.startsWith('claude-');
+
+    const chatModel = isClaudeModel
+      ? new ChatAnthropic({
+          model: modelId,
+          temperature: 0.5,
+          apiKey: process.env.ANTHROPIC_API_KEY,
+          maxRetries: 0,
+        })
+      : new ChatGoogleGenerativeAI({
+          model: modelId || 'gemini-2.5-flash',
+          temperature: 0.5,
+          apiKey: process.env.GOOGLE_API_KEY,
+          maxRetries: 0,
+        });
 
     // Defender persona: support and fortify document claims with evidence.
     const defenderSystemPrompt = [
@@ -283,7 +299,8 @@ export const createAgents = async (retriever) => {
           return response.trim();
         } catch (error) {
           if (isRateLimitError(error)) {
-            throw new Error('RATE_LIMIT_CHAT: Google chat RPM limit reached during debate turn.');
+            const provider = isClaudeModel ? 'Anthropic' : 'Google';
+            throw new Error(`RATE_LIMIT_CHAT: ${provider} chat RPM limit reached during debate turn.`);
           }
 
           throw new Error(`Failed to generate persona response: ${error.message}`);

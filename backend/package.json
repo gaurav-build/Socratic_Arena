@@ -20,6 +20,7 @@
   "license": "MIT",
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
+    "@langchain/anthropic": "^0.3.34",
     "@langchain/core": "^0.3.19",
     "@langchain/google-genai": "^0.1.7",
     "@supabase/supabase-js": "^2.99.2",

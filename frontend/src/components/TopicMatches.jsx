@@ -145,7 +145,11 @@ const TopicMatches = ({ socket, user }) => {
       for (const m of needsSummary) {
         try {
           const baseUrl = (import.meta.env.VITE_BACKEND_URL ? `${import.meta.env.VITE_BACKEND_URL}/api` : 'http://localhost:5000/api');
-          const res = await fetch(`${baseUrl}/matches/${m.id}/summary`, { method: 'POST' });
+          const { data: { session } } = await supabase.auth.getSession();
+          const res = await fetch(`${baseUrl}/matches/${m.id}/summary`, {
+            method: 'POST',
+            headers: session?.access_token ? { 'Authorization': `Bearer ${session.access_token}` } : {},
+          });
           if (res.ok) {
             const data = await res.json();
             if (data.success) {

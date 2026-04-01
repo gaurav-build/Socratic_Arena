@@ -10,6 +10,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@rollup/plugin-terser": "^1.0.0",
     "@supabase/supabase-js": "^2.99.1",
     "axios": "^1.13.5",
     "html-to-image": "^1.11.13",
@@ -20,6 +21,7 @@
     "react-dom": "^19.2.0",
     "react-router-dom": "^7.13.1",
     "recharts": "^3.8.0",
+    "serialize-javascript": "^7.0.5",
     "socket.io-client": "^4.8.3"
   },
   "devDependencies": {
@@ -36,6 +38,9 @@
     "postcss": "^8.5.6",
     "tailwindcss": "^4.2.0",
     "vite": "^7.3.1",
-    "vite-plugin-pwa": "^1.2.0"
+    "vite-plugin-pwa": "^0.19.8"
+  },
+  "overrides": {
+    "serialize-javascript": "^7.0.5"
   }
 }

@@ -81,6 +81,12 @@ const DEBATE_TOPICS = [
 // Express provides the HTTP framework for APIs.
 import express from 'express';
 
+// Security middleware: sets various HTTP security headers
+import helmet from 'helmet';
+
+// Rate limiting middleware for HTTP routes
+import rateLimit from 'express-rate-limit';
+
 // Node's built-in HTTP module allows us to create a raw HTTP server,
 // then mount both Express and Socket.io on the same network port.
 import http from 'http';
@@ -397,13 +403,16 @@ const CLIENT_ORIGIN = process.env.CLIENT_ORIGIN || 'http://localhost:5173';
  * We add middleware early so every incoming request can use it.
  */
 
+// Apply HTTP security headers (X-Frame-Options, X-Content-Type-Options, etc.)
+app.use(helmet());
+
 // Parse incoming JSON payloads (e.g., { "message": "hello" }).
-// This is required for POST/PUT/PATCH routes that accept JSON request bodies.
-app.use(express.json());
+// Limit body size to 100kb to prevent large payload DoS attacks.
+app.use(express.json({ limit: '100kb' }));
 
 // Parse URL-encoded payloads (HTML form submissions).
 // extended: true allows richer object structures in form data.
-app.use(express.urlencoded({ extended: true }));
+app.use(express.urlencoded({ extended: true, limit: '100kb' }));
 
 // Explicit CORS setup for frontend HTTP requests.
 app.use((req, res, next) => {
@@ -419,12 +428,56 @@ app.use((req, res, next) => {
   next();
 });
 
+/**
+ * HTTP Rate Limiters
+ * ---------------------------------------------------------------------------
+ * Protect expensive AI endpoints from abuse and DoS attacks.
+ */
+const generalApiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, message: 'Too many requests. Please try again later.' },
+});
+
+const aiEndpointLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, message: 'Rate limit exceeded. Please wait before making another request.' },
+});
+
 // Mount all API routes under a versionable base path.
 // Example: POST /api/debate
-app.use('/api', apiRoutes);
+app.use('/api', generalApiLimiter, apiRoutes);
+
+/**
+ * HTTP Authentication Middleware
+ * ---------------------------------------------------------------------------
+ * Verifies the Supabase JWT from the Authorization header for protected routes.
+ */
+const requireAuth = async (req, res, next) => {
+  const authHeader = req.headers.authorization;
+  const token = authHeader && authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
+  if (!token) {
+    return res.status(401).json({ success: false, message: 'Authentication required.' });
+  }
+  try {
+    const { data: { user }, error } = await supabase.auth.getUser(token);
+    if (error || !user) {
+      return res.status(401).json({ success: false, message: 'Invalid or expired token.' });
+    }
+    req.authenticatedUserId = user.id;
+    next();
+  } catch (err) {
+    return res.status(401).json({ success: false, message: 'Authentication error.' });
+  }
+};
 
 // Endpoint to dynamically generate and save a 1-liner crux summary for a match
-app.post('/api/matches/:id/summary', async (req, res) => {
+app.post('/api/matches/:id/summary', requireAuth, aiEndpointLimiter, async (req, res) => {
   const { id } = req.params;
   try {
     const { data: match, error } = await supabase.from('matches').select('transcript, ai_scores').eq('id', id).single();
@@ -1257,8 +1310,16 @@ io.on('connection', (socket) => {
     if (!checkRateLimit(userId, 'propose_topic', 5, 60000)) {
       return socket.emit('topic_result', { success: false, message: 'Too many proposals. Please wait 60 seconds.' });
     }
+    // Input validation: ensure newTopic is a non-empty string within allowed length
+    if (!newTopic || typeof newTopic !== 'string' || !newTopic.trim()) {
+      return socket.emit('topic_result', { success: false, message: 'Topic cannot be empty.' });
+    }
+    const sanitizedTopic = newTopic.trim().slice(0, 300); // Limit to 300 chars to prevent prompt inflation
+    if (sanitizedTopic.length < 5) {
+      return socket.emit('topic_result', { success: false, message: 'Topic is too short. Please provide a meaningful debate topic.' });
+    }
     try {
-      console.log(`[AI Bouncer] Analyzing new topic: "${newTopic}"`);
+      console.log(`[AI Bouncer] Analyzing new topic: "${sanitizedTopic}"`);
 
       // 1. Fetch existing topics from the dedicated topics table
       const { data: existingTopics } = await supabase
@@ -1274,7 +1335,7 @@ ${JSON.stringify(topicList)}
 </EXISTING_TOPICS>
 
 <NEW_PROPOSED_TOPIC>
-${newTopic}
+${sanitizedTopic}
 </NEW_PROPOSED_TOPIC>
 
 CRITICAL INSTRUCTIONS:
@@ -1301,7 +1362,7 @@ Respond STRICTLY with a valid JSON object and nothing else: {"isDuplicate": true
           matchedTopic: jsonResult.matchedTopic
         });
       } else {
-        console.log(`[AI Bouncer] Approved new topic: "${newTopic}"`);
+        console.log(`[AI Bouncer] Approved new topic: "${sanitizedTopic}"`);
 
         // AI-Powered Category Detection: Ask Gemini to classify the topic
         const validCategories = ['Food', 'Health', 'Science', 'Technology', 'Geopolitics', 'Politics', 'Society', 'Philosophy', 'Sports', 'Economics', 'Entertainment'];
@@ -1309,7 +1370,7 @@ Respond STRICTLY with a valid JSON object and nothing else: {"isDuplicate": true
         try {
           const categoryPrompt = `You are a topic classifier for a debate platform.
 Classify this debate topic into exactly ONE category from the list below.
-Topic: "${newTopic}"
+Topic: "${sanitizedTopic}"
 Categories: ${validCategories.join(', ')}
 If none fit well, use "General".
 Respond STRICTLY with a valid JSON object and nothing else: {"category": "CategoryName"}`;
@@ -1317,7 +1378,7 @@ Respond STRICTLY with a valid JSON object and nothing else: {"category": "Catego
           const catResult = await generateWithRetry(categoryPrompt, 2, true);
           if (catResult?.category && validCategories.includes(catResult.category)) {
             detectedCategory = catResult.category;
-            console.log(`[AI Bouncer] Detected category for "${newTopic}": ${detectedCategory}`);
+            console.log(`[AI Bouncer] Detected category for "${sanitizedTopic}": ${detectedCategory}`);
           } else {
             console.log(`[AI Bouncer] Category detection returned invalid result, defaulting to General:`, catResult);
           }
@@ -1325,7 +1386,7 @@ Respond STRICTLY with a valid JSON object and nothing else: {"category": "Catego
           console.error('[AI Bouncer] Category detection failed, using General:', catErr);
         }
 
-        await supabase.from('topics').insert([{ title: newTopic, category: detectedCategory }]);
+        await supabase.from('topics').insert([{ title: sanitizedTopic, category: detectedCategory }]);
         io.emit('new_topic_added');
         socket.emit('topic_result', { success: true, message: `New arena created successfully in ${detectedCategory}! It is now on the grid.` });
       }
@@ -1340,14 +1401,14 @@ Respond STRICTLY with a valid JSON object and nothing else: {"category": "Catego
   // =========================================================================
 
   /**
-   * Generate an 8-char arena code from creator's user ID + random suffix
+   * Generate an 8-char arena code using cryptographically secure randomness.
+   * Uses crypto.randomInt to avoid modulo bias and Math.random() predictability.
    */
-  function generateArenaCode(userId) {
-    const prefix = (userId || '').replace(/-/g, '').substring(0, 4).toUpperCase();
+  function generateArenaCode() {
     const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-    let suffix = '';
-    for (let i = 0; i < 4; i++) suffix += chars[Math.floor(Math.random() * chars.length)];
-    return `${prefix}-${suffix}`;
+    let code = '';
+    for (let i = 0; i < 8; i++) code += chars[crypto.randomInt(0, chars.length)];
+    return `${code.slice(0, 4)}-${code.slice(4)}`;
   }
 
   /**
@@ -1370,7 +1431,7 @@ Respond STRICTLY with a valid JSON object and nothing else: {"category": "Catego
       let arenaCode;
       let attempts = 0;
       while (attempts < 5) {
-        arenaCode = generateArenaCode(userId);
+        arenaCode = generateArenaCode();
         const { data: existing } = await withTimeout(supabase
           .from('private_arenas')
           .select('id')
@@ -1917,12 +1978,11 @@ Respond STRICTLY with a valid JSON object and nothing else: {"found": true/false
         return socket.emit('challenge_error', { message: 'You already have a pending challenge to this user.' });
       }
 
-      // --- Generate arena code ---
-      const prefix = (challengerId || '').replace(/-/g, '').substring(0, 4).toUpperCase();
+      // --- Generate arena code using cryptographically secure randomness ---
       const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-      let suffix = '';
-      for (let i = 0; i < 4; i++) suffix += chars[Math.floor(Math.random() * chars.length)];
-      const arenaCode = `${prefix}-${suffix}`;
+      let arenaCodeRaw = '';
+      for (let i = 0; i < 8; i++) arenaCodeRaw += chars[crypto.randomInt(0, chars.length)];
+      const arenaCode = `${arenaCodeRaw.slice(0, 4)}-${arenaCodeRaw.slice(4)}`;
 
       // --- Insert challenge row ---
       const expiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString(); // 15 minutes
@@ -2449,9 +2509,11 @@ app.use((req, res) => {
 app.use((err, req, res, next) => {
   console.error('[server:error]', err);
 
-  res.status(err.statusCode || 500).json({
+  // Do not expose internal error details to the client to prevent information leakage.
+  const statusCode = err.statusCode || 500;
+  res.status(statusCode).json({
     success: false,
-    message: err.message || 'Internal Server Error',
+    message: statusCode < 500 ? (err.message || 'Bad request') : 'Internal Server Error',
   });
 });
 

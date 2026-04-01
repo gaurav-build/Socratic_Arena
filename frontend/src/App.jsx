@@ -18,6 +18,7 @@ const Lobby = lazy(() => import('./components/Lobby'));
 const DebateArena = lazy(() => import('./components/DebateArena'));
 const MatchReview = lazy(() => import('./components/MatchReview'));
 const TopicMatches = lazy(() => import('./components/TopicMatches'));
+const SoloArena = lazy(() => import('./components/SoloArena'));
 
 // Singleton Socket (Auto-connect disabled until token is ready)
 const socket = io(import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000', {
@@ -199,6 +200,10 @@ const App = () => {
           <Route
             path="/topic/:topicTitle"
             element={session ? <ErrorBoundary><TopicMatches socket={socket} user={session.user} /></ErrorBoundary> : <Navigate to="/" replace />}
+          />
+          <Route
+            path="/solo"
+            element={session ? <ErrorBoundary><SoloArena /></ErrorBoundary> : <Navigate to="/" replace />}
           />
 
           {/* Fallback routing */}

@@ -55,7 +55,7 @@ export const handleDebateUpload = async (req, res) => {
     }
 
     // 2) Validate topic because debate needs a guiding question/context.
-    const { topic, totalRounds, socketId } = req.body;
+    const { topic, totalRounds, socketId, model } = req.body;
 
     if (!topic || typeof topic !== 'string' || !topic.trim()) {
       res.status(400).json({
@@ -100,7 +100,7 @@ export const handleDebateUpload = async (req, res) => {
         const { retriever } = await createKnowledgeBase(chunks);
 
         // 6) Build Critic + Defender agents connected to that retriever.
-        const { defender, critic } = await createAgents(retriever);
+        const { defender, critic } = await createAgents(retriever, model);
 
         // 7) Stream each turn as it is generated.
         await runDebate(
@@ -138,7 +138,7 @@ export const handleDebateUpload = async (req, res) => {
           io.to(room).emit('debate_error', {
             success: false,
             message: isRateLimited
-              ? 'Google API rate limit reached (429). Please wait about 60 seconds, then try again.'
+              ? 'AI provider rate limit reached (429). Please wait about 60 seconds, then try again.'
               : 'Failed to process debate request. Please try again later.',
             error: backgroundError.message,
           });

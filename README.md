@@ -17,6 +17,7 @@
   <img src="https://img.shields.io/badge/Node.js-v18+-339933?style=flat-square&logo=node.js&logoColor=white" alt="Node.js" />
   <img src="https://img.shields.io/badge/React-19-61DAFB?style=flat-square&logo=react&logoColor=black" alt="React 19" />
   <img src="https://img.shields.io/badge/Gemini_AI-2.5_Flash-4285F4?style=flat-square&logo=google&logoColor=white" alt="Gemini AI" />
+  <img src="https://img.shields.io/badge/Claude-Anthropic-6B48FF?style=flat-square&logo=anthropic&logoColor=white" alt="Claude AI" />
   <img src="https://img.shields.io/badge/Supabase-PostgreSQL-3ECF8E?style=flat-square&logo=supabase&logoColor=white" alt="Supabase" />
   <img src="https://img.shields.io/badge/Socket.IO-Realtime-010101?style=flat-square&logo=socket.io&logoColor=white" alt="Socket.IO" />
   <img src="https://img.shields.io/badge/TailwindCSS-4-06B6D4?style=flat-square&logo=tailwindcss&logoColor=white" alt="TailwindCSS" />
@@ -141,6 +142,7 @@ Unlike social media flame wars, The Socratic Arena rewards *thinking* — not sh
 
 ### 🤖 AI-Powered Intelligence
 - **Gemini 2.5 Flash** evaluates every debate on three axes: Logic, Facts, and Relevance (1–10 scale).
+- **Claude model support** — Solo Arena supports Claude 3.5 Sonnet, Claude 3.7 Sonnet, and Claude 3 Opus as drop-in alternatives to Gemini for the Critic/Defender debate agents.
 - **AI Topic Categorization** — New topics are automatically classified into 12 domains using Gemini-powered domain analysis.
 - **AI Bouncer** — Validates and deduplicates new topics using semantic similarity analysis.
 - **AI-powered semantic search** — Find debates by conceptual meaning rather than just keyword matches.
@@ -178,8 +180,8 @@ Unlike social media flame wars, The Socratic Arena rewards *thinking* — not sh
 | **UI Components** | Lucide React, Recharts | Icons, radar/bar charts |
 | **Realtime** | Socket.IO Client/Server | Bidirectional WebSocket communication |
 | **Backend** | Node.js, Express 4 | REST API + Socket.IO server |
-| **AI Engine** | Google Gemini 2.5 Flash | Debate evaluation, topic classification, semantic analysis |
-| **AI Framework** | LangChain + Google GenAI | Structured AI chains, embeddings, semantic search |
+| **AI Engine** | Google Gemini 2.5 Flash · Anthropic Claude | Debate evaluation, topic classification, semantic analysis |
+| **AI Framework** | LangChain + Google GenAI + Anthropic | Structured AI chains, embeddings, semantic search |
 | **Database** | Supabase (PostgreSQL) | Auth, profiles, matches, topics, votes, real-time subscriptions |
 | **Auth** | Supabase Auth | OAuth / email authentication |
 | **Export Tools** | html2canvas | UI snapshots and visual state capture |
@@ -295,6 +297,11 @@ SUPABASE_SERVICE_KEY=your-service-role-key
 
 # Google Gemini AI — Get from https://aistudio.google.com
 GEMINI_API_KEY=your-gemini-api-key
+GOOGLE_API_KEY=your-gemini-api-key   # Used for RAG embeddings + Gemini-based Solo Arena agents
+
+# Anthropic Claude AI — Get from https://console.anthropic.com
+# Required only when using Claude models (claude-3-5-sonnet, claude-3-opus, etc.) in Solo Arena
+ANTHROPIC_API_KEY=your-anthropic-api-key
 
 # Feature Flags
 ENABLE_ADVANCED_AI=true    # Toggle AI evaluation (set false to reduce API costs)
